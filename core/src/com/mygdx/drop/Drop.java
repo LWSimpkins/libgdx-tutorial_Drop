@@ -2,15 +2,20 @@ package com.mygdx.drop;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.TimeUtils;
 
-import java.awt.Rectangle;
+import com.badlogic.gdx.math.Rectangle;
+import java.util.Iterator;
 
 public class Drop extends ApplicationAdapter {
 	private Texture dropImage;
@@ -22,6 +27,10 @@ public class Drop extends ApplicationAdapter {
     private SpriteBatch batch;
 
     private Rectangle bucket;
+    private Vector3 touchPos;
+
+    private Array<Rectangle> raindrops;
+    private long lastDropTime;
 
 	@Override
 	public void create () {
@@ -50,6 +59,13 @@ public class Drop extends ApplicationAdapter {
         bucket.y = 20;
         bucket.width = 64;
         bucket.height = 64;
+
+        //create vector3, is 3D coordinate
+        touchPos = new Vector3();
+
+        //create raindrop array, spawn first raindrop
+        raindrops = new Array<Rectangle>();
+        spawnRaindrop();
 	}
 
 	@Override
@@ -61,19 +77,56 @@ public class Drop extends ApplicationAdapter {
         //good practice to update the camera once per frame, though not done here
         camera.update();
 
-        //render bucket
+        //render bucket, raindrops
         batch.setProjectionMatrix(camera.combined);     //use coordinate system of the camera
         batch.begin();
         batch.draw(bucketImage, bucket.x, bucket.y);
+        for(Rectangle raindrop : raindrops)
+        {
+            batch.draw(dropImage, raindrop.x, raindrop.y);
+        }
         batch.end();
 
-        //move the bucket on user input
+        //move the bucket on user touch/mouse input
         if(Gdx.input.isTouched()){
-            Vector3 touchPos = new Vector3();
             touchPos.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-            camera.unproject(touchPos);
+            camera.unproject(touchPos); //convert coordinates to cameras coordinate system
             bucket.x = (int)touchPos.x - 64/2;
         }
 
-	}
+        //move bucket on keyboard input, 200px per second
+        if(Gdx.input.isKeyPressed(Input.Keys.LEFT)) bucket.x -= 200 * Gdx.graphics.getDeltaTime();
+        if(Gdx.input.isKeyPressed(Input.Keys.RIGHT)) bucket.x += 200 * Gdx.graphics.getDeltaTime();
+
+        //keep bucket within screen limits
+        if(bucket.x <0) bucket.x = 0;
+        if(bucket.x > 800 - 64) bucket.x = 800 - 64;
+
+        //check time since last raindrop spawned. create new one if necessary
+        if(TimeUtils.nanoTime() - lastDropTime > 1000000000) spawnRaindrop();
+
+        //make raindrops move
+        Iterator<Rectangle> iter = raindrops.iterator();
+        while(iter.hasNext()){
+            Rectangle raindrop = iter.next();
+            raindrop.y -= 200 * Gdx.graphics.getDeltaTime();
+            if(raindrop.y +64 < 0) iter.remove();
+
+            //play sound, remove raindrop if it hits the bucket
+            if(raindrop.overlaps(bucket)){
+                dropSound.play();
+                iter.remove();
+            }
+        }
+    }
+
+    private void spawnRaindrop(){
+        Rectangle raindrop = new Rectangle();
+        raindrop.x = MathUtils.random(0, 800-64);
+        raindrop.y = 480;
+        raindrop.width = 64;
+        raindrop.height = 64;
+        raindrops.add(raindrop);
+        lastDropTime = TimeUtils.nanoTime();
+    }
 }
